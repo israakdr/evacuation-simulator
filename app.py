@@ -28,7 +28,7 @@ if uploaded_file is not None:
     st.image(image, caption="Uploaded Floorplan", use_container_width=True)
     
     st.markdown("---")
-    st.markdown("## 🔍 Wall Extraction (v0.7 - 3D View)")
+    st.markdown("## 🔍 Wall Extraction (v0.8 - 3D Extruded)")
     
     with st.spinner("Processing floorplan..."):
         # ============================================
@@ -124,7 +124,6 @@ if uploaded_file is not None:
         # 5. Convert to JSON
         # ============================================
         walls_data = []
-        walls_image = image_np.copy()
         external_count = 0
         internal_count = 0
         
@@ -134,16 +133,10 @@ if uploaded_file is not None:
             
             if length > 150:
                 wall_type = "external"
-                color = (255, 0, 0)
-                thickness = 3
                 external_count += 1
             else:
                 wall_type = "internal"
-                color = (0, 255, 0)
-                thickness = 2
                 internal_count += 1
-            
-            cv2.line(walls_image, (int(x1), int(y1)), (int(x2), int(y2)), color, thickness)
             
             walls_data.append({
                 "id": i,
@@ -152,44 +145,19 @@ if uploaded_file is not None:
                 "end": {"x": int(x2), "y": int(y2)},
                 "length": round(float(length), 2)
             })
-        
-        # ============================================
-        # 6. Build JSON
-        # ============================================
-        building_data = {
-            "building_name": uploaded_file.name,
-            "image_size": {
-                "width": int(image_np.shape[1]),
-                "height": int(image_np.shape[0])
-            },
-            "total_walls": len(walls_data),
-            "external_walls": external_count,
-            "internal_walls": internal_count,
-            "walls": walls_data
-        }
     
     # ============================================
-    # Display Results
-    # ============================================
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 🖼️ Cleaned Walls")
-        st.image(walls_clean, caption="After noise removal", use_container_width=True, clamp=True)
-    
-    with col2:
-        st.markdown("### 📏 Detected Walls (Merged)")
-        st.image(walls_image, caption=f"Detected {len(walls_data)} walls", use_container_width=True)
-    
-    # ============================================
-    # 3D Visualization (v0.7)
+    # 3D Visualization (v0.8 - Extruded)
     # ============================================
     st.markdown("---")
-    st.markdown("## 🌐 3D View")
+    st.markdown("## 🌐 3D View (Extruded)")
     
     fig = go.Figure()
     
-    # Add walls as 3D lines
+    # Wall height (in pixels)
+    WALL_HEIGHT = 200
+    
+    # Add walls as 3D planes (extruded)
     for wall in walls_data:
         x1 = wall["start"]["x"]
         y1 = wall["start"]["y"]
@@ -198,30 +166,47 @@ if uploaded_file is not None:
         
         if wall["type"] == "external":
             color = "red"
-            width = 6
+            opacity = 0.9
         else:
             color = "green"
-            width = 4
+            opacity = 0.7
         
-        fig.add_trace(go.Scatter3d(
-            x=[x1, x2],
-            y=[y1, y2],
-            z=[0, 0],
-            mode='lines',
-            line=dict(color=color, width=width),
-            name=f"Wall {wall['id']} ({wall['type']})",
+        # Create a vertical plane for each wall
+        fig.add_trace(go.Mesh3d(
+            x=[x1, x2, x2, x1],
+            y=[y1, y2, y2, y1],
+            z=[0, 0, WALL_HEIGHT, WALL_HEIGHT],
+            color=color,
+            opacity=opacity,
+            showscale=False,
+            name=f"Wall {wall['id']}",
             showlegend=False
         ))
     
+    # Add floor (optional)
+    fig.add_trace(go.Mesh3d(
+        x=[0, image_np.shape[1], image_np.shape[1], 0],
+        y=[0, 0, image_np.shape[0], image_np.shape[0]],
+        z=[0, 0, 0, 0],
+        color='lightgray',
+        opacity=0.2,
+        showscale=False,
+        name="Floor",
+        showlegend=False
+    ))
+    
     fig.update_layout(
-        title="3D Floorplan View",
+        title="3D Floorplan View (Extruded Walls)",
         scene=dict(
             xaxis_title="X (pixels)",
             yaxis_title="Y (pixels)",
-            zaxis_title="Height (m)",
-            aspectmode='data'
+            zaxis_title="Height (pixels)",
+            aspectmode='data',
+            camera=dict(
+                eye=dict(x=1.5, y=1.5, z=1.2)
+            )
         ),
-        height=600
+        height=700
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -256,7 +241,7 @@ if uploaded_file is not None:
         data=json_string
     )
     
-    st.success("✅ v0.7 complete. 3D view ready. Next: evacuation simulation.")
+    st.success("✅ v0.8 complete. Walls are extruded. Next: evacuation simulation.")
 
 else:
     st.info("👆 Please upload a floorplan image to begin.")
