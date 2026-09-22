@@ -4,136 +4,96 @@
     <meta charset="utf-8">
     <title>3D Floorplan Viewer</title>
     <style>
-        body { margin: 0; overflow: hidden; }
+        body { margin: 0; overflow: hidden; background: #f0f0f0; }
         canvas { display: block; }
         #info {
             position: absolute;
             top: 10px;
             left: 10px;
             color: white;
-            background: rgba(0,0,0,0.8);
-            padding: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
             font-family: Arial;
             border-radius: 5px;
             font-size: 14px;
         }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial;
+            font-size: 20px;
+            color: #333;
+        }
     </style>
+    <!-- Load Three.js from fast CDN (minified) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
     <div id="info">Loading 3D Floorplan...</div>
+    <div id="loading">⏳ Loading 3D Viewer...</div>
     
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    <script>
+        // Remove loading message after scene is ready
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
         }
-    }
-    </script>
-    
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        
-        // ============================================
-        // 0. Load JSON Data
-        // ============================================
-        const wallsData = WALLS_JSON_PLACEHOLDER;
-        
-        const buildingWidth = wallsData.image_size.width;
-        const buildingHeight = wallsData.image_size.height;
-        const centerX = buildingWidth / 2;
-        const centerY = buildingHeight / 2;
         
         // ============================================
         // 1. Scene Setup
         // ============================================
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xE8E8E8);
+        scene.background = new THREE.Color(0xf5f5f5);
         
         const camera = new THREE.PerspectiveCamera(
-            50,
+            60,
             window.innerWidth / window.innerHeight,
             0.1,
             10000
-        );
-        // Camera positioned to see the whole building from a good angle
-        camera.position.set(
-            centerX + buildingWidth * 0.8,
-            buildingHeight * 1.5,
-            centerY + buildingHeight * 0.8
         );
         
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
         
-        const controls = new OrbitControls(camera, renderer.domElement);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.target.set(centerX, 40, centerY);
-        controls.minDistance = 200;
-        controls.maxDistance = 2000;
         
         // ============================================
         // 2. Lighting
         // ============================================
-        // Ambient
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
         
-        // Main directional light (sun)
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
-        dirLight.position.set(centerX + 800, 1500, centerY + 800);
+        dirLight.position.set(500, 1000, 500);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 2048;
-        dirLight.shadow.mapSize.height = 2048;
-        dirLight.shadow.camera.near = 0.5;
-        dirLight.shadow.camera.far = 5000;
-        dirLight.shadow.camera.left = -1000;
-        dirLight.shadow.camera.right = 1000;
-        dirLight.shadow.camera.top = 1000;
-        dirLight.shadow.camera.bottom = -1000;
         scene.add(dirLight);
-        
-        // Fill light
-        const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-        fillLight.position.set(centerX - 500, 500, centerY - 500);
-        scene.add(fillLight);
         
         // ============================================
         // 3. Floor
         // ============================================
-        const floorGeometry = new THREE.PlaneGeometry(buildingWidth, buildingHeight);
+        const floorGeometry = new THREE.PlaneGeometry(2000, 2000);
         const floorMaterial = new THREE.MeshStandardMaterial({
-            color: 0xFFFFFF,
-            side: THREE.DoubleSide,
-            roughness: 0.8,
-            metalness: 0.1
+            color: 0xdddddd,
+            side: THREE.DoubleSide
         });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
-        floor.position.set(centerX, 0, centerY);
         floor.receiveShadow = true;
         scene.add(floor);
         
-        // Grid helper (for reference)
-        const gridHelper = new THREE.GridHelper(
-            Math.max(buildingWidth, buildingHeight) * 1.5,
-            20,
-            0xCCCCCC,
-            0xE0E0E0
-        );
-        gridHelper.position.set(centerX, 0.1, centerY);
-        scene.add(gridHelper);
+        // ============================================
+        // 4. Load Walls from JSON (embedded)
+        // ============================================
+        const wallsData = WALLS_DATA_PLACEHOLDER;
         
-        // ============================================
-        // 4. Create Walls
-        // ============================================
-        const WALL_HEIGHT = 150;
-        const WALL_THICKNESS = 12;
+        const WALL_HEIGHT = 100;
+        const WALL_THICKNESS = 5;
         
         function createWall(x1, y1, x2, y2, type) {
             const dx = x2 - x1;
@@ -141,20 +101,16 @@
             const length = Math.sqrt(dx * dx + dy * dy);
             const angle = Math.atan2(dy, dx);
             
-            const geometry = new THREE.BoxGeometry(
-                length + WALL_THICKNESS,  // Add thickness to close corners
-                WALL_HEIGHT,
-                WALL_THICKNESS
-            );
+            const geometry = new THREE.BoxGeometry(length, WALL_HEIGHT, WALL_THICKNESS);
             
-            // Different shades for external vs internal
-            const color = type === 'external' ? 0xB71C1C : 0x2E7D32;
-            const material = new THREE.MeshStandardMaterial({
-                color: color,
-                roughness: 0.7,
-                metalness: 0.1
-            });
+            let color = 0x333333;
+            if (type === 'external') {
+                color = 0xcc0000;
+            } else {
+                color = 0x00aa00;
+            }
             
+            const material = new THREE.MeshStandardMaterial({ color: color });
             const wall = new THREE.Mesh(geometry, material);
             
             wall.position.set(
@@ -170,29 +126,37 @@
             return wall;
         }
         
-        let wallCount = 0;
         if (wallsData && wallsData.walls) {
             wallsData.walls.forEach(wall => {
-                scene.add(createWall(
-                    wall.start.x,
-                    wall.start.y,
-                    wall.end.x,
-                    wall.end.y,
-                    wall.type
-                ));
-                wallCount++;
+                const x1 = wall.start.x;
+                const y1 = wall.start.y;
+                const x2 = wall.end.x;
+                const y2 = wall.end.y;
+                const type = wall.type;
+                
+                scene.add(createWall(x1, y1, x2, y2, type));
             });
+            
+            document.getElementById('info').innerText = 
+                `Total Walls: ${wallsData.total_walls} | External: ${wallsData.external_walls} | Internal: ${wallsData.internal_walls}`;
+        } else {
+            document.getElementById('info').innerText = 'No walls data available';
         }
         
         // ============================================
-        // 5. Info Panel
+        // 5. Fit Camera to Scene
         // ============================================
-        document.getElementById('info').innerHTML = 
-            `<b>🏢 Building:</b> ${wallsData.building_name}<br>` +
-            `<b>📏 Size:</b> ${buildingWidth} × ${buildingHeight} px<br>` +
-            `<b>🧱 Total Walls:</b> ${wallsData.total_walls}<br>` +
-            `<b>🔴 External:</b> ${wallsData.external_walls} | ` +
-            `<b>🟢 Internal:</b> ${wallsData.internal_walls}`;
+        const box = new THREE.Box3().setFromObject(scene);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        
+        camera.position.set(
+            center.x + size.x * 0.8,
+            center.y + size.y * 1.5,
+            center.z + size.z * 0.8
+        );
+        controls.target.copy(center);
+        controls.update();
         
         // ============================================
         // 6. Animation Loop
@@ -203,6 +167,9 @@
             renderer.render(scene, camera);
         }
         animate();
+        
+        // Hide loading message
+        hideLoading();
         
         // ============================================
         // 7. Handle Window Resize
