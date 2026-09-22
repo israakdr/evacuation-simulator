@@ -26,13 +26,13 @@ if uploaded_file is not None:
     st.image(image, caption="Uploaded Floorplan", use_container_width=True)
     
     st.markdown("---")
-    st.markdown("## 🔍 Wall Extraction (v0.2)")
+    st.markdown("## 🔍 Wall Extraction (v0.3 - Hybrid)")
     
     with st.spinner("Processing floorplan..."):
         # Step 1: Convert to grayscale
         gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
         
-        # Step 2: Adaptive threshold (better than fixed threshold)
+        # Step 2: Adaptive threshold
         thresh = cv2.adaptiveThreshold(
             gray, 255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -40,41 +40,58 @@ if uploaded_file is not None:
             11, 2
         )
         
-        # Step 3: Morphological operations to remove noise
+        # Step 3: Morphological operations
         kernel = np.ones((3, 3), np.uint8)
-        # Remove small noise
         cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-        # Connect broken lines
         cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=2)
         
-        # Step 4: Edge detection
+        # Step 4: Detect LONG lines (external walls)
         edges = cv2.Canny(cleaned, 50, 150)
         
-        # Step 5: Hough Transform with stricter parameters
-        lines = cv2.HoughLinesP(
+        lines_long = cv2.HoughLinesP(
             edges,
             rho=1,
             theta=np.pi/180,
-            threshold=80,          # Higher threshold = fewer lines
-            minLineLength=100,     # Only long lines (walls)
-            maxLineGap=20          # Allow gaps in walls
+            threshold=80,
+            minLineLength=100,
+            maxLineGap=20
         )
         
-        # Step 6: Draw only long lines
+        # Step 5: Detect SHORT lines (internal walls)
+        lines_short = cv2.HoughLinesP(
+            edges,
+            rho=1,
+            theta=np.pi/180,
+            threshold=30,
+            minLineLength=20,
+            maxLineGap=10
+        )
+        
+        # Step 6: Draw all detected lines
         walls_image = image_np.copy()
         wall_count = 0
         
-        if lines is not None:
-            for line in lines:
+        # Draw long lines (blue - external walls)
+        if lines_long is not None:
+            for line in lines_long:
                 coords = line.flatten()
                 if len(coords) == 4:
                     x1, y1, x2, y2 = coords
-                    # Calculate line length
+                    cv2.line(walls_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 3)
+                    wall_count += 1
+        
+        # Draw short lines (green - internal walls)
+        short_count = 0
+        if lines_short is not None:
+            for line in lines_short:
+                coords = line.flatten()
+                if len(coords) == 4:
+                    x1, y1, x2, y2 = coords
                     length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-                    # Only draw lines longer than 100 pixels
-                    if length > 100:
-                        cv2.line(walls_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 3)
-                        wall_count += 1
+                    # Only draw if shorter than long lines
+                    if length < 100:
+                        cv2.line(walls_image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                        short_count += 1
     
     col1, col2 = st.columns(2)
     
@@ -83,8 +100,8 @@ if uploaded_file is not None:
         st.image(cleaned, caption="After noise removal", use_container_width=True, clamp=True)
     
     with col2:
-        st.markdown("### 📏 Detected Walls (Long Lines Only)")
-        st.image(walls_image, caption=f"Detected {wall_count} wall segments", use_container_width=True)
+        st.markdown("### 📏 Detected Walls (Hybrid)")
+        st.image(walls_image, caption=f"Blue = External Walls | Green = Internal Walls", use_container_width=True)
     
     st.markdown("---")
     st.markdown("## 📊 Statistics")
@@ -92,15 +109,15 @@ if uploaded_file is not None:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Detected Walls", wall_count)
+        st.metric("External Walls (Blue)", wall_count)
     
     with col2:
-        st.metric("Image Width", f"{image_np.shape[1]} px")
+        st.metric("Internal Walls (Green)", short_count)
     
     with col3:
-        st.metric("Image Height", f"{image_np.shape[0]} px")
+        st.metric("Total Walls", wall_count + short_count)
     
-    st.success("✅ v0.2 complete. Walls are now cleaner. Next: 3D model.")
+    st.success("✅ v0.3 complete. Now we have both external and internal walls.")
 
 else:
     st.info("👆 Please upload a floorplan image to begin.")
