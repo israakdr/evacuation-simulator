@@ -47,9 +47,10 @@ if uploaded_file is not None:
         
         if lines is not None:
             for line in lines:
-                if line is not None and len(line) > 0:
-                    x1, y1, x2, y2 = line[0]
-                    cv2.line(walls_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                coords = line.flatten()
+                if len(coords) == 4:
+                    x1, y1, x2, y2 = coords
+                    cv2.line(walls_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
                     wall_count += 1
     
     col1, col2 = st.columns(2)
