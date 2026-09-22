@@ -1,4 +1,6 @@
 import streamlit as st
+import cv2
+import numpy as np
 from PIL import Image
 
 # ============================================
@@ -25,28 +27,84 @@ uploaded_file = st.file_uploader(
 )
 
 # ============================================
-# Display Uploaded Image
+# Process Uploaded Image
 # ============================================
 if uploaded_file is not None:
+    # Load image
     image = Image.open(uploaded_file)
+    image_np = np.array(image)
     
+    # Display original
     st.markdown("---")
-    st.markdown("## 📐 Uploaded Floorplan")
+    st.markdown("## 📐 Original Floorplan")
     st.image(image, caption="Uploaded Floorplan", use_container_width=True)
     
-    # Image Info
-    st.markdown("### 📊 Image Information")
+    # ============================================
+    # Image Processing (OpenCV)
+    # ============================================
+    st.markdown("---")
+    st.markdown("## 🔍 Wall Extraction")
+    
+    with st.spinner("Processing floorplan..."):
+        # Convert to grayscale
+        gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+        
+        # Apply threshold (invert: walls become white)
+        _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+        
+        # Edge detection
+        edges = cv2.Canny(gray, 50, 150)
+        
+        # Detect lines (Hough Transform)
+        lines = cv2.HoughLinesP(
+            edges,
+            rho=1,
+            theta=np.pi/180,
+            threshold=50,
+            minLineLength=30,
+            maxLineGap=10
+        )
+        
+        # Draw detected lines
+        walls_image = image_np.copy()
+        wall_count = 0
+        if lines is not None:
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                cv2.line(walls_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                wall_count += 1
+    
+    # ============================================
+    # Display Results
+    # ============================================
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 🖼️ Thresholded Image")
+        st.image(thresh, caption="Black lines = potential walls", use_container_width=True, clamp=True)
+    
+    with col2:
+        st.markdown("### 📏 Detected Walls")
+        st.image(walls_image, caption=f"Detected {wall_count} wall segments", use_container_width=True)
+    
+    # ============================================
+    # Statistics
+    # ============================================
+    st.markdown("---")
+    st.markdown("## 📊 Statistics")
+    
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Width", f"{image.size[0]} px")
+        st.metric("Detected Lines", wall_count)
     
     with col2:
-        st.metric("Height", f"{image.size[1]} px")
+        st.metric("Image Width", f"{image_np.shape[1]} px")
     
     with col3:
-        st.metric("Format", image.format)
+        st.metric("Image Height", f"{image_np.shape[0]} px")
     
-    st.success("✅ Floorplan uploaded successfully. Next step: wall extraction.")
+    st.success("✅ Wall extraction complete. Next step: convert to 3D model.")
+
 else:
     st.info("👆 Please upload a floorplan image to begin.")
