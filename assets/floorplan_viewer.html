@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>3D Floorplan Viewer</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            font-family: Arial;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Loading 3D Floorplan...</div>
+    
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        
+        // ============================================
+        // 1. Scene Setup
+        // ============================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+        
+        // Camera
+        const camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            10000
+        );
+        camera.position.set(500, 500, 500);
+        
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        
+        // ============================================
+        // 2. Lighting
+        // ============================================
+        // Ambient light
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        // Directional light
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(1000, 1000, 500);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        
+        // ============================================
+        // 3. Floor
+        // ============================================
+        const floorGeometry = new THREE.PlaneGeometry(500, 500);
+        const floorMaterial = new THREE.MeshStandardMaterial({
+            color: 0xcccccc,
+            side: THREE.DoubleSide
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        // ============================================
+        // 4. Example Walls (will be replaced by JSON data)
+        // ============================================
+        function createWall(x1, y1, x2, y2, height = 50) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
+            
+            const geometry = new THREE.BoxGeometry(length, height, 5);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x333333
+            });
+            const wall = new THREE.Mesh(geometry, material);
+            
+            // Position at midpoint
+            wall.position.set(
+                (x1 + x2) / 2,
+                height / 2,
+                (y1 + y2) / 2
+            );
+            
+            // Rotate
+            wall.rotation.y = -angle;
+            
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            
+            return wall;
+        }
+        
+        // Add example walls (a simple room)
+        scene.add(createWall(0, 0, 200, 0));      // Bottom
+        scene.add(createWall(200, 0, 200, 200));  // Right
+        scene.add(createWall(200, 200, 0, 200));  // Top
+        scene.add(createWall(0, 200, 0, 0));      // Left
+        
+        // Update info
+        document.getElementById('info').innerText = 'Simple Room (Example)';
+        
+        // ============================================
+        // 5. Animation Loop
+        // ============================================
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+        
+        // ============================================
+        // 6. Handle Window Resize
+        // ============================================
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
