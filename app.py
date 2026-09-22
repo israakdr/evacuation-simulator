@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from PIL import Image
 import json
+import plotly.graph_objects as go
 
 st.set_page_config(
     page_title="Evacuation Simulator",
@@ -27,7 +28,7 @@ if uploaded_file is not None:
     st.image(image, caption="Uploaded Floorplan", use_container_width=True)
     
     st.markdown("---")
-    st.markdown("## 🔍 Wall Extraction (v0.6 - Merged)")
+    st.markdown("## 🔍 Wall Extraction (v0.7 - 3D View)")
     
     with st.spinner("Processing floorplan..."):
         # ============================================
@@ -72,30 +73,21 @@ if uploaded_file is not None:
         )
         
         # ============================================
-        # 4. Merge Similar Lines (v0.6)
+        # 4. Merge Similar Lines
         # ============================================
         def are_similar(line1, line2, angle_tol=10, dist_tol=20):
-            """Check if two lines are similar (same direction and close)."""
             x1, y1, x2, y2 = line1
             x3, y3, x4, y4 = line2
-            
-            # Calculate angles
             angle1 = np.degrees(np.arctan2(y2 - y1, x2 - x1))
             angle2 = np.degrees(np.arctan2(y4 - y3, x4 - x3))
-            
-            # Angle difference
             angle_diff = abs(angle1 - angle2)
             if angle_diff > 90:
                 angle_diff = 180 - angle_diff
-            
-            # Distance between midpoints
             mid1 = ((x1 + x2) / 2, (y1 + y2) / 2)
             mid2 = ((x3 + x4) / 2, (y3 + y4) / 2)
             dist = np.sqrt((mid1[0] - mid2[0])**2 + (mid1[1] - mid2[1])**2)
-            
             return angle_diff < angle_tol and dist < dist_tol
         
-        # Merge lines
         merged_lines = []
         used = set()
         
@@ -106,8 +98,6 @@ if uploaded_file is not None:
                 coords1 = line1.flatten()
                 if len(coords1) != 4:
                     continue
-                
-                # Find similar lines
                 group = [coords1]
                 for j, line2 in enumerate(lines):
                     if j <= i or j in used:
@@ -118,8 +108,6 @@ if uploaded_file is not None:
                     if are_similar(coords1, coords2):
                         group.append(coords2)
                         used.add(j)
-                
-                # Merge group into one line (average)
                 if len(group) > 1:
                     all_x1 = [g[0] for g in group]
                     all_y1 = [g[1] for g in group]
@@ -129,7 +117,6 @@ if uploaded_file is not None:
                               int(np.mean(all_x2)), int(np.mean(all_y2))]
                 else:
                     merged = coords1
-                
                 merged_lines.append(merged)
                 used.add(i)
         
@@ -145,7 +132,6 @@ if uploaded_file is not None:
             x1, y1, x2, y2 = coords
             length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
             
-            # Classify (improved)
             if length > 150:
                 wall_type = "external"
                 color = (255, 0, 0)
@@ -195,6 +181,51 @@ if uploaded_file is not None:
         st.markdown("### 📏 Detected Walls (Merged)")
         st.image(walls_image, caption=f"Detected {len(walls_data)} walls", use_container_width=True)
     
+    # ============================================
+    # 3D Visualization (v0.7)
+    # ============================================
+    st.markdown("---")
+    st.markdown("## 🌐 3D View")
+    
+    fig = go.Figure()
+    
+    # Add walls as 3D lines
+    for wall in walls_data:
+        x1 = wall["start"]["x"]
+        y1 = wall["start"]["y"]
+        x2 = wall["end"]["x"]
+        y2 = wall["end"]["y"]
+        
+        if wall["type"] == "external":
+            color = "red"
+            width = 6
+        else:
+            color = "green"
+            width = 4
+        
+        fig.add_trace(go.Scatter3d(
+            x=[x1, x2],
+            y=[y1, y2],
+            z=[0, 0],
+            mode='lines',
+            line=dict(color=color, width=width),
+            name=f"Wall {wall['id']} ({wall['type']})",
+            showlegend=False
+        ))
+    
+    fig.update_layout(
+        title="3D Floorplan View",
+        scene=dict(
+            xaxis_title="X (pixels)",
+            yaxis_title="Y (pixels)",
+            zaxis_title="Height (m)",
+            aspectmode='data'
+        ),
+        height=600
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
     # Statistics
     st.markdown("---")
     st.markdown("## 📊 Statistics")
@@ -225,7 +256,7 @@ if uploaded_file is not None:
         data=json_string
     )
     
-    st.success("✅ v0.6 complete. Walls merged. Next: 3D model.")
+    st.success("✅ v0.7 complete. 3D view ready. Next: evacuation simulation.")
 
 else:
     st.info("👆 Please upload a floorplan image to begin.")
