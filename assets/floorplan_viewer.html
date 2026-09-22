@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <title>3D Floorplan Viewer</title>
     <style>
-        body { margin: 0; overflow: hidden; }
+        body { margin: 0; overflow: hidden; background: #f0f0f0; }
         canvas { display: block; }
         #info {
             position: absolute;
@@ -15,6 +15,7 @@
             padding: 10px;
             font-family: Arial;
             border-radius: 5px;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -38,15 +39,14 @@
         // 1. Scene Setup
         // ============================================
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0);
+        scene.background = new THREE.Color(0xf5f5f5);
         
         const camera = new THREE.PerspectiveCamera(
-            75,
+            60,
             window.innerWidth / window.innerHeight,
             0.1,
             10000
         );
-        camera.position.set(500, 500, 500);
         
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -56,40 +56,44 @@
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.target.set(200, 0, 200);
         
         // ============================================
         // 2. Lighting
         // ============================================
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
         
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(1000, 1000, 500);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight.position.set(500, 1000, 500);
         dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
         scene.add(dirLight);
         
         // ============================================
         // 3. Floor
         // ============================================
-        const floorGeometry = new THREE.PlaneGeometry(500, 500);
+        const floorGeometry = new THREE.PlaneGeometry(2000, 2000);
         const floorMaterial = new THREE.MeshStandardMaterial({
-            color: 0xf5f5f5,
+            color: 0xdddddd,
             side: THREE.DoubleSide
         });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
-        floor.position.set(225, 0, 225);
         floor.receiveShadow = true;
         scene.add(floor);
         
         // ============================================
-        // 4. Load Walls from JSON
+        // 4. Load Walls from JSON (embedded)
         // ============================================
-        const wallsData = WALLS_JSON_PLACEHOLDER;
-        const WALL_HEIGHT = 50;
+        // The JSON data will be injected here by Streamlit
+        const wallsData = WALLS_DATA_PLACEHOLDER;
+        
+        // Wall height
+        const WALL_HEIGHT = 100;
         const WALL_THICKNESS = 5;
         
+        // Function to create a wall
         function createWall(x1, y1, x2, y2, type) {
             const dx = x2 - x1;
             const dy = y2 - y1;
@@ -98,9 +102,14 @@
             
             const geometry = new THREE.BoxGeometry(length, WALL_HEIGHT, WALL_THICKNESS);
             
-            const color = type === 'external' ? 0xCC0000 : 0x00AA00;
-            const material = new THREE.MeshStandardMaterial({ color: color });
+            let color = 0x333333;
+            if (type === 'external') {
+                color = 0xcc0000;
+            } else {
+                color = 0x00aa00;
+            }
             
+            const material = new THREE.MeshStandardMaterial({ color: color });
             const wall = new THREE.Mesh(geometry, material);
             
             wall.position.set(
@@ -110,15 +119,13 @@
             );
             
             wall.rotation.y = -angle;
-            
             wall.castShadow = true;
             wall.receiveShadow = true;
             
             return wall;
         }
         
-        // Add all walls from JSON
-        let wallCount = 0;
+        // Create all walls
         if (wallsData && wallsData.walls) {
             wallsData.walls.forEach(wall => {
                 const x1 = wall.start.x;
@@ -128,16 +135,32 @@
                 const type = wall.type;
                 
                 scene.add(createWall(x1, y1, x2, y2, type));
-                wallCount++;
             });
+            
+            // Update info
+            document.getElementById('info').innerText = 
+                `Total Walls: ${wallsData.total_walls} | External: ${wallsData.external_walls} | Internal: ${wallsData.internal_walls}`;
+        } else {
+            document.getElementById('info').innerText = 'No walls data available';
         }
         
-        // Update info
-        document.getElementById('info').innerText = 
-            `Building: ${wallsData.building_name} | Walls: ${wallCount}`;
+        // ============================================
+        // 5. Fit Camera to Scene
+        // ============================================
+        const box = new THREE.Box3().setFromObject(scene);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        
+        camera.position.set(
+            center.x + size.x * 0.8,
+            center.y + size.y * 1.5,
+            center.z + size.z * 0.8
+        );
+        controls.target.copy(center);
+        controls.update();
         
         // ============================================
-        // 5. Animation Loop
+        // 6. Animation Loop
         // ============================================
         function animate() {
             requestAnimationFrame(animate);
@@ -147,7 +170,7 @@
         animate();
         
         // ============================================
-        // 6. Handle Window Resize
+        // 7. Handle Window Resize
         // ============================================
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
