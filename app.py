@@ -68,11 +68,12 @@ if uploaded_file is not None:
         # Draw detected lines
         walls_image = image_np.copy()
         wall_count = 0
-        if lines is not None:
+                if lines is not None:
             for line in lines:
-                x1, y1, x2, y2 = line[0]
-                cv2.line(walls_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                wall_count += 1
+                if line is not None and len(line) > 0:
+                    x1, y1, x2, y2 = line[0]
+                    cv2.line(walls_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                    wall_count += 1
     
     # ============================================
     # Display Results
